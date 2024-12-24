@@ -5,6 +5,18 @@ Globals:
   Api:
     EndpointConfiguration: REGIONAL
 
+Parameters:
+  AwsAccessKey:
+    Type: String
+    Description: Enter access key
+  AwsSecretKey:
+    Type: String
+    Description: Enter secret key
+  DynamoDBPostTable:
+    Description: Dynamodb table for post
+    Type: String
+    Default: posts
+
 Resources:
   SpringbootCrudWithLambdaFunction:
     Type: AWS::Serverless::Function
@@ -15,12 +27,29 @@ Resources:
       MemorySize: 512
       Policies: AWSLambdaBasicExecutionRole
       Timeout: 30
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBPostTable
+          IAM_USER_ACCESS_KEY: !Ref AwsAccessKey
+          IAM_USER_SECRET_KEY: !Ref AwsSecretKey
       Events:
         ProxyResource:
           Type: Api
           Properties:
             Path: /{proxy+}
             Method: any
+
+  PostsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoDBPostTable
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
 
 Outputs:
   SpringbootCrudWithLambdaApi:
