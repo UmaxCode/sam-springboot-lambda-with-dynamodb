@@ -8,7 +8,7 @@ import org.umaxcode.service.PostService;
 import java.util.List;
 
 @RestController
-@RequestMapping("/post")
+@RequestMapping("/posts")
 public class PostController {
 
     private final PostService postService;
@@ -16,7 +16,6 @@ public class PostController {
     public PostController(PostService postService) {
         this.postService = postService;
     }
-
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -32,13 +31,19 @@ public class PostController {
 
     @GetMapping("/{id}")
     @ResponseStatus(HttpStatus.OK)
-    public Post getPostById(@PathVariable int id) {
+    public Post getPostById(@PathVariable String id) {
         return postService.getPostById(id);
+    }
+
+    @PatchMapping("/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public Post updatePostById(@PathVariable String id, Post post) {
+        return postService.updatePostById(id, post);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deletePostById(@PathVariable int id) {
+    public void deletePostById(@PathVariable String id) {
         postService.deletePostById(id);
     }
 }

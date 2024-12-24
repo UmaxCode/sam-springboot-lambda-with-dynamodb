@@ -10,7 +10,9 @@ public interface PostService {
 
     List<Post> getAllPost();
 
-    Post getPostById(int id);
+    Post getPostById(String  id);
 
-    void deletePostById(int id);
+    Post updatePostById(String id, Post post);
+
+    void deletePostById(String id);
 }
