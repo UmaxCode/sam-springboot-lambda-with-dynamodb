@@ -1,9 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: AWS Serverless Spring Boot 2 API - org.umaxcode::springboot-crud-with-lambda
-Globals:
-  Api:
-    EndpointConfiguration: REGIONAL
 
 Parameters:
   AwsAccessKey:
@@ -16,17 +13,32 @@ Parameters:
     Description: Dynamodb table for post
     Type: String
     Default: posts
+  CognitoPool:
+    Type: String
+    Description: Enter Cognito poll name
+  CallbackUrl:
+    Type: String
+    Description: Enter call back url
+  UserPoolAdminGroupName:
+    Description: User pool group name for API administrators
+    Type: String
+    Default: apiAdmins
+
+Globals:
+  Api:
+    EndpointConfiguration: REGIONAL
+  Function:
+    Runtime: java21
+    MemorySize: 512
+    Timeout: 30
 
 Resources:
   SpringbootCrudWithLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: org.umaxcode.StreamLambdaHandler::handleRequest
-      Runtime: java21
       CodeUri: .
-      MemorySize: 512
       Policies: AWSLambdaBasicExecutionRole
-      Timeout: 30
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref DynamoDBPostTable
@@ -37,7 +49,90 @@ Resources:
           Type: Api
           Properties:
             Path: /{proxy+}
+            RestApiId: !Ref ApiGatewayApi
             Method: any
+
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: MyApiGateway
+      StageName: Prod
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+            AuthorizerType: JWT
+            JwtConfiguration:
+              Audience:
+                - !Ref UserPoolClient
+              Issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
+            IdentitySource:
+              - '$request.header.Authorization'
+      Cors:
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${AWS::StackName}-UserPool
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+      UsernameAttributes:
+        - email
+      UserPoolTags:
+        Key: Name
+        Value: !Sub ${AWS::StackName} User Pool
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ${AWS::StackName}UserPoolClient
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      RefreshTokenValidity: 30
+      SupportedIdentityProviders:
+        - COGNITO
+      UserPoolId: !Ref UserPool
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - "implicit"
+        - "code"
+      AllowedOAuthScopes:
+        - "email"
+        - "openid"
+      CallbackURLs:
+        - "https://spring.io/"
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref UserPoolClient
+      UserPoolId: !Ref UserPool
+
+  ApiAdministratorsUserPoolGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      Description: User group for API Administrators
+      GroupName: !Ref UserPoolAdminGroupName
+      Precedence: 0
+      UserPoolId: !Ref UserPool
 
   PostsTable:
     Type: AWS::DynamoDB::Table
@@ -54,6 +149,27 @@ Resources:
 Outputs:
   SpringbootCrudWithLambdaApi:
     Description: URL for application
-    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/ping'
+    Value: !Sub 'https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/ping'
     Export:
       Name: SpringbootCrudWithLambdaApi
+
+  UsersTable:
+    Description: DynamoDB Users table
+    Value: !Ref PostsTable
+
+  UserPool:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+
+  UserPoolClient:
+    Description: Cognito User Pool Application Client ID
+    Value: !Ref UserPoolClient
+
+  CognitoLoginURL:
+    Description: Cognito User Pool Application Client Hosted Login UI URL
+    Value: !Sub "https://${UserPoolClient}.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&redirect_uri=https://spring.io/"
+
+  CognitoAuthCommand:
+    Description: AWS CLI command for Amazon Cognito User Pool authentication
+    Value: !Sub "aws cognito-idp initiate-auth --auth-flow USER_PASSWORD_AUTH --client-id ${UserPoolClient} --auth-parameters USERNAME=<username>,PASSWORD=<password> --query 'AuthenticationResult.IdToken' --output text"
+
